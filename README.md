@@ -325,7 +325,8 @@ cmaker/medidores/pj1103c_01/telemetria
 ## 📁 Estrutura do Repositório
 
 ```text
-├── README.md                                    <- Documentação técnica consolidada (este arquivo)
+├── README.md                                    <- Documentação técnica consolidada do projeto
+├── TuyaMCU.md                                   <- Guia técnico detalhado do protocolo TuyaMCU
 └── brainstorms/
     ├── Infos.md                                 <- Levantamento técnico de hardware e CIs (Origem: Gemini)
     └── conversa_sensor_corrente_tuya.md         <- Análise conceitual, arquitetura e UART (Origem: GPT)
