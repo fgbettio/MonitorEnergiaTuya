@@ -327,6 +327,9 @@ cmaker/medidores/pj1103c_01/telemetria
 ```text
 ├── README.md                                    <- Documentação técnica consolidada do projeto
 ├── TuyaMCU.md                                   <- Guia técnico detalhado do protocolo TuyaMCU
+├── SRC/
+│   └── V0/
+│       └── passo_a_passo_solucao_a.md           <- Roteiro prático passo a passo para a Solução A (OpenBeken)
 └── brainstorms/
     ├── Infos.md                                 <- Levantamento técnico de hardware e CIs (Origem: Gemini)
     └── conversa_sensor_corrente_tuya.md         <- Análise conceitual, arquitetura e UART (Origem: GPT)
