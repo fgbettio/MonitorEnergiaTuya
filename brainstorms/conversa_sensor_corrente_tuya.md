@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Discussão sobre sensores/medidores de corrente Tuya de baixo custo, encontrados em marketplaces como AliExpress, com o objetivo de compreender a arquitetura do equipamento, interceptar a comunicação interna e eventualmente substituir o firmware para enviar os dados a um servidor próprio.
+Discussão sobre sensores/medidores de corrente Tuya de baixo custo, encontrados em marketplaces como AliExpress, com o objetivo de compreender a arquitetura do equipamento, interceptar a comunicação interna e eventualmente substituir o firmware para enviar os dados a um servidor próprio via protocolo MQTT (Message Queuing Telemetry Transport).
 
 ## 1. Arquitetura provável do equipamento
 
@@ -12,25 +12,25 @@ Esses dispositivos Tuya frequentemente possuem duas partes:
    - Faz a aquisição dos sinais elétricos.
    - Pode medir corrente, tensão, potência, energia acumulada e outros parâmetros.
    - Pode controlar relés e outras funções locais.
-   - Possui um microcontrolador ou CI dedicado à medição.
+   - Possui uma MCU (Microcontroller Unit - Unidade Microcontroladora) ou CI (Circuito Integrado) dedicado à medição.
 
 2. **Módulo de comunicação Wi-Fi**
    - Recebe informações do controlador principal.
    - Faz a comunicação com a rede Wi-Fi.
    - No firmware original, normalmente encaminha informações para o ecossistema Tuya.
-   - Dependendo do produto, pode utilizar chips ESP8266/ESP8285, Beken, Realtek ou outras famílias.
+   - Dependendo do produto, pode utilizar chips ESP8266/ESP8285, Beken, Realtek ou outras famílias de SoC (System on Chip - Sistema em Chip).
 
 Arquitetura conceitual:
 
 ```text
-Sensor de corrente
+Sensor de corrente (TC - Transformador de Corrente)
        |
        v
-Circuito/MCU de medição
+Circuito/MCU (Microcontroller Unit) de medição
        |
-       | UART
+       | UART (Universal Asynchronous Receiver/Transmitter)
        v
-Módulo Wi-Fi Tuya
+Módulo Wi-Fi Tuya (SoC)
        |
        v
 Rede / Internet / Tuya Cloud
@@ -38,22 +38,22 @@ Rede / Internet / Tuya Cloud
 
 ## 2. Dois conjuntos de TX/RX
 
-Foi observado que o equipamento possui dois conjuntos aparentemente diferentes de TX/RX:
+Foi observado que o equipamento possui dois conjuntos aparentemente diferentes de TX (Transmissão) / RX (Recepção):
 
-- Um conjunto na placa principal, em uma região que aparenta ser utilizada para programação, teste ou diagnóstico de fábrica.
+- Um conjunto na PCB (Printed Circuit Board - Placa de Circuito Impresso) principal, em uma região utilizada para programação SWD (Serial Wire Debug), teste ou diagnóstico de fábrica FCT (Functional Circuit Test).
 - Outro conjunto associado à placa/módulo de comunicação Wi-Fi.
 
-Isso pode indicar interfaces UART distintas.
+Isso pode indicar interfaces UART (Universal Asynchronous Receiver/Transmitter) distintas.
 
 Uma hipótese de arquitetura é:
 
 ```text
-Pads de fábrica
+Pads de fábrica (FCT / SWD)
       |
       v
 MCU principal
       |
-      | UART de comunicação
+      | UART de comunicação (TuyaMCU)
       v
 Módulo Wi-Fi
 ```
@@ -62,42 +62,42 @@ Os pads de fábrica podem estar associados a programação, debug, calibração 
 
 ## 3. UART, níveis TTL/CMOS e RS-232
 
-### UART
+### UART (Universal Asynchronous Receiver/Transmitter)
 
 UART (*Universal Asynchronous Receiver/Transmitter*) é o mecanismo de comunicação serial assíncrona.
 
 Normalmente utiliza:
 
-- TX — transmissão;
-- RX — recepção;
-- GND — referência elétrica.
+- TX — transmissão de dados;
+- RX — recepção de dados;
+- GND (*Ground*) — referência elétrica de terra.
 
 Não existe uma linha de clock separada. Os dois equipamentos precisam utilizar parâmetros compatíveis, principalmente a taxa de transmissão (*baud rate*).
 
 Exemplos:
 
-- 9.600 baud
-- 19.200 baud
-- 115.200 baud
+- 9.600 bps (bits por segundo)
+- 19.200 bps
+- 115.200 bps
 
 ### TTL/CMOS
 
-TTL/CMOS, nesse contexto, refere-se aos níveis elétricos utilizados pelos sinais digitais.
+TTL (Transistor-Transistor Logic) / CMOS (Complementary Metal-Oxide-Semiconductor), nesse contexto, refere-se aos níveis elétricos utilizados pelos sinais digitais.
 
-Em módulos modernos é comum encontrar UART trabalhando em 3,3 V, embora isso precise ser medido antes de conectar equipamentos externos.
+Em módulos modernos é comum encontrar UART trabalhando em 3.3V DC (Direct Current - Corrente Contínua), embora isso precise ser medido antes de conectar equipamentos externos.
 
 Portanto:
 
 ```text
-UART = forma/protocolo lógico da comunicação serial
-TTL/CMOS = níveis elétricos usados nos sinais
+UART = forma/protocolo lógico da comunicação serial assíncrona
+TTL/CMOS = níveis elétricos usados nos sinais digitais (ex.: 3.3V)
 ```
 
-### RS-232
+### RS-232 (Recommended Standard 232)
 
-RS-232 utiliza uma camada elétrica diferente, tradicionalmente com tensões positivas e negativas e características incompatíveis com a entrada lógica direta de muitos microcontroladores.
+RS-232 utiliza uma camada elétrica diferente, tradicionalmente com tensões positivas e negativas (±12V) e características incompatíveis com a entrada lógica direta de microcontroladores.
 
-Assim, uma porta RS-232 clássica não deve ser conectada diretamente aos pinos RX/TX de um microcontrolador sem o circuito conversor adequado.
+Assim, uma porta RS-232 clássica **nunca** deve ser conectada diretamente aos pinos RX/TX de um microcontrolador sem o circuito conversor adequado (ex.: transceptor MAX3232).
 
 ## 4. Interceptação da comunicação
 
@@ -108,9 +108,9 @@ Pode-se observar a comunicação existente entre o controlador de medição e o 
 Exemplo:
 
 ```text
-MCU de medição ---- TX ----> módulo Wi-Fi
-                        |
-                        +----> analisador lógico / RX de monitoramento
+MCU de medição ---- TX ----> Módulo Wi-Fi
+                         |
+                         +----> Analisador lógico / RX de monitoramento (USB-Serial)
 ```
 
 Dessa forma é possível capturar os bytes enviados pelo controlador.
@@ -119,27 +119,27 @@ Durante a captura podem ser realizados testes controlados, como:
 
 - ligar e desligar uma carga;
 - variar a potência da carga;
-- observar alterações na tensão;
-- observar alterações na corrente;
-- acompanhar o aumento da energia acumulada;
+- observar alterações na tensão RMS (Root Mean Square);
+- observar alterações na corrente RMS;
+- acompanhar o aumento da energia acumulada em kWh (quilowatt-hora);
 - acionar o relé, quando existente.
 
 A comparação dos frames pode revelar quais campos representam cada variável.
 
-## 5. Protocolo Tuya e Datapoints
+## 5. Protocolo Tuya e Datapoints (DPs)
 
-Muitos equipamentos Tuya utilizam comunicação serial estruturada entre o MCU principal e o módulo de comunicação.
+Muitos equipamentos Tuya utilizam comunicação serial estruturada entre a MCU principal e o módulo de comunicação (protocolo TuyaMCU).
 
-Os dados podem ser representados através de **datapoints (DPs)**.
+Os dados são representados através de **DPs (Datapoints - Pontos de Dados)**.
 
 Dependendo do equipamento, podem existir DPs correspondentes a:
 
-- tensão;
-- corrente;
-- potência;
+- tensão RMS;
+- corrente RMS;
+- potência ativa;
 - energia acumulada;
 - estado do relé;
-- alarmes;
+- alarmes de sobrecorrente/subtensão;
 - configurações.
 
 O número, formato, escala e significado dos datapoints podem variar entre produtos.
@@ -147,13 +147,13 @@ O número, formato, escala e significado dos datapoints podem variar entre produ
 Uma das etapas da engenharia reversa é construir um mapa semelhante a:
 
 ```text
-DP XX -> tensão
-DP YY -> corrente
-DP ZZ -> potência
-DP WW -> energia acumulada
+DP XX -> Tensão RMS
+DP YY -> Corrente RMS
+DP ZZ -> Potência Ativa
+DP WW -> Energia Acumulada
 ```
 
-Esses números são apenas ilustrativos até que o protocolo específico do equipamento seja capturado.
+Esses números são validados após capturar e decodificar o tráfego real.
 
 ## 6. Servidor próprio
 
@@ -164,21 +164,21 @@ Arquitetura desejada:
 ```text
 MCU de medição
       |
-      | UART / protocolo Tuya
+      | UART / protocolo TuyaMCU
       v
-Firmware próprio
+Firmware próprio (ex.: OpenBeken / ESPHome)
       |
       | Wi-Fi
       v
-MQTT ou HTTP
+MQTT (Message Queuing Telemetry Transport) ou HTTP
       |
       v
-Servidor próprio
+Servidor próprio (ex.: Home Assistant)
 ```
 
-Isso permitiria retirar a dependência da nuvem Tuya.
+Isso permite retirar completamente a dependência da nuvem Tuya.
 
-Um exemplo de estrutura MQTT seria:
+Um exemplo de estrutura de tópicos MQTT seria:
 
 ```text
 cmaker/energia/sensor01/tensao
@@ -192,33 +192,34 @@ cmaker/energia/sensor01/energia
 Dependendo do chip encontrado no módulo Wi-Fi, podem existir diferentes caminhos:
 
 - firmware próprio;
-- OpenBeken;
-- LibreTiny;
+- **OpenBeken** (para chips Beken BK7231 / BK7238);
+- **ESPHome** / **Tasmota** (caso o rádio seja baseado em ESP8266/ESP32);
+- **LibreTiny**;
 - outras soluções compatíveis com a família específica do microcontrolador.
 
 Antes de escolher uma solução é necessário identificar exatamente:
 
 - modelo do módulo Wi-Fi;
-- chip utilizado;
-- pinagem;
+- chip SoC (System on Chip) utilizado;
+- pinagem e pads de teste;
 - método de programação;
-- tensão lógica;
+- nível de tensão lógica (3.3V);
 - protocolo entre os dois controladores.
 
 ## 8. Estratégia recomendada de investigação
 
 Uma sequência adequada para o projeto é:
 
-1. Fotografar frente e verso da placa.
-2. Identificar o MCU/CI de medição.
-3. Identificar o chip e o modelo do módulo Wi-Fi.
+1. Fotografar frente e verso da PCB (Placa de Circuito Impresso).
+2. Identificar a MCU / CI (Circuito Integrado) de medição.
+3. Identificar o chip SoC e o modelo do módulo Wi-Fi.
 4. Rastrear os dois conjuntos TX/RX.
 5. Medir as tensões antes de conectar qualquer equipamento.
 6. Verificar se existe isolamento galvânico em relação à rede elétrica.
 7. Capturar passivamente a UART.
 8. Descobrir baud rate e parâmetros da serial.
 9. Registrar os frames em diferentes condições de carga.
-10. Identificar o protocolo e os datapoints.
+10. Identificar o protocolo e os DPs (Datapoints).
 11. Construir um decodificador.
 12. Publicar os dados em MQTT ou HTTP.
 13. Somente depois avaliar substituição do firmware original.
@@ -230,8 +231,8 @@ Para uma primeira investigação, a ideia é evitar transmitir qualquer coisa pa
 Conceitualmente:
 
 ```text
-TX do Tuya --------> RX do analisador/monitor
-GND ----------------> referência do analisador
+TX do Tuya --------> RX do analisador/monitor USB-UART
+GND ----------------> Referência de terra do analisador
 ```
 
 O TX do equipamento de análise permanece desconectado nessa etapa.
@@ -242,29 +243,29 @@ Isso reduz o risco de interferência lógica na comunicação original.
 
 Este é um ponto crítico.
 
-Medidores de energia e sensores de corrente conectados diretamente à rede podem utilizar fontes **não isoladas galvanicamente**.
+Medidores de energia e sensores de corrente conectados diretamente à rede utilizam fontes **não isoladas galvanicamente** da rede AC (Alternating Current).
 
-Nesse caso, o GND da UART pode estar eletricamente relacionado à rede.
+Nesse caso, o GND da UART está eletricamente relacionado à rede de alta tensão (110V/220V).
 
-Portanto, não se deve assumir que os pads TX/RX/GND são seguros para conexão direta a:
+Portanto, **nunca** se deve conectar diretamente com a tomada AC ligada a:
 
 - computador;
 - notebook;
-- USB-UART;
+- conversor USB-UART (Universal Serial Bus);
 - osciloscópio aterrado;
 - analisador lógico conectado via USB.
 
-Antes da conexão é necessário verificar a arquitetura elétrica e o isolamento do equipamento.
+Antes da conexão é necessário desconectar a rede AC e alimentar a placa por uma fonte externa de **3.3V DC regulada**.
 
 ## Próximo passo
 
 Quando houver fotografias nítidas da placa, registrar:
 
-- frente da placa completa;
-- verso da placa completa;
-- aproximação do primeiro TX/RX;
-- aproximação do segundo TX/RX;
-- inscrições dos circuitos integrados;
+- frente da PCB completa;
+- verso da PCB completa;
+- aproximação do primeiro conjunto TX/RX;
+- aproximação do segundo conjunto TX/RX;
+- inscrições dos CIs (Circuitos Integrados);
 - identificação do módulo Wi-Fi.
 
 Com essas informações será possível montar o mapa da placa e definir uma estratégia mais precisa para captura da UART e desenvolvimento do firmware/servidor próprio.

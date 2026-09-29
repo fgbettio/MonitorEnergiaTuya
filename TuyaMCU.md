@@ -1,25 +1,25 @@
-# Guia Técnico Completo: Protocolo TuyaMCU
+# Guia Técnico Completo: Protocolo TuyaMCU (Microcontroller Unit)
 
-Este documento detalha o funcionamento, arquitetura, formato de frames, tipos de dados, engenharia reversa e formas de integração do protocolo serial **TuyaMCU**.
+Este documento detalha o funcionamento, arquitetura, formato de frames, tipos de dados, engenharia reversa e formas de integração do protocolo serial **TuyaMCU (Tuya Microcontroller Unit)**.
 
 ---
 
 ## 1. O que é o TuyaMCU?
 
-O **TuyaMCU** é o protocolo de comunicação serial assíncrona (UART) padronizado pela Tuya para desacoplar duas funções essenciais em dispositivos inteligentes:
+O **TuyaMCU** é o protocolo de comunicação serial assíncrona UART (Universal Asynchronous Receiver/Transmitter) padronizado pela Tuya para desacoplar duas funções essenciais em dispositivos inteligentes:
 
-1. **Microcontrolador de Aplicação (MCU Externa):** Responsável pelo controle de hardware em tempo real, leitura analógica de sensores de precisão (ex.: chip `HLW8112`), acionamento de relés e lógica de segurança local.
-2. **Módulo de Rádio/Conectividade:** Responsável pela pilha de rede (Wi-Fi, BLE, Zigbee), provisionamento, criptografia de transporte e comunicação com a nuvem ou servidor local.
+1. **MCU de Aplicação (Microcontroller Unit Externa):** Responsável pelo controle de hardware em tempo real, leitura analógica de sensores de precisão através do CI (Circuito Integrado) `HLW8112`, acionamento de relés e lógica de proteção local.
+2. **Módulo de Rádio/Conectividade:** Responsável pela pilha de rede (Wi-Fi, BLE - Bluetooth Low Energy, Zigbee), provisionamento, criptografia de transporte e comunicação com a nuvem ou servidor local.
 
 ```mermaid
 flowchart LR
     subgraph "Camada Local / Sensores"
-        Sensor["TC Clamps / Tensão AC"] --> HLW["CI HLW8112"]
-        HLW --> MCU["MCU Principal\n(ex.: Nation N32G430)"]
+        Sensor["TCs (Transformadores de Corrente / Clamps) / Tensão AC (Corrente Alternada)"] --> HLW["CI (Circuito Integrado) HLW8112"]
+        HLW --> MCU["MCU (Unidade Microcontroladora) Principal\n(ex.: Nation N32G430)"]
     end
 
     subgraph "Camada de Conectividade"
-        MCU <-->|UART / TuyaMCU (Hex)| Radio["Módulo de Rádio\n(ex.: Beken BK7238 / ESP32)"]
+        MCU <-->|UART / TuyaMCU (Hex)| Radio["Módulo de Rádio\n(SoC Beken BK7238 / ESP32)"]
     end
 
     subgraph "Camada de Rede"
@@ -31,7 +31,7 @@ flowchart LR
 
 ## 2. Abertura e Licenciamento
 
-* **Camada Serial Livre e Não Criptografada:** Ao contrário do tráfego de rede TLS com a nuvem, os dados transmitidos pelo barramento UART entre os dois chips **não possuem criptografia**. Trafegam em hexadecimal estruturado (*plaintext bytes*).
+* **Camada Serial Livre e Não Criptografada:** Ao contrário do tráfego de rede TLS (Transport Layer Security) com a nuvem, os dados transmitidos pelo barramento UART (Universal Asynchronous Receiver/Transmitter) entre os dois chips **não possuem criptografia**. Trafegam em hexadecimal estruturado (*plaintext bytes*).
 * **Documentação Pública:** A Tuya mantém documentação técnica oficial aberta sobre os comandos e fluxos do protocolo para desenvolvedores de hardware.
 * **Ecossistema Open-Source:** Amplamente suportado e documentado em projetos abertos como **ESPHome**, **Tasmota**, **OpenBeken** e **Home Assistant**.
 
@@ -39,7 +39,7 @@ flowchart LR
 
 ## 3. Especificação e Anatomia do Pacote (Frame Format)
 
-Cada mensagem trocada pela UART obedece à seguinte sequência rígida de bytes:
+Cada mensagem trocada pela UART (Universal Asynchronous Receiver/Transmitter) obedece à seguinte sequência rígida de bytes:
 
 ```text
 +--------+--------+---------+---------+-------------+---------------------+----------+
@@ -56,7 +56,7 @@ Cada mensagem trocada pela UART obedece à seguinte sequência rígida de bytes:
 | **Versão** | 1 byte | Versão do protocolo de comunicação | `0x00` ou `0x03` |
 | **Comando** | 1 byte | Código da ação executada pelo pacote | `0x00` (Heartbeat), `0x06` (Reportar DP) |
 | **Comprimento** | 2 bytes | Quantidade total de bytes do payload (Big-Endian) | `0x00 0x08` (8 bytes de payload) |
-| **Payload** | N bytes | Contém um ou mais Datapoints estruturados | `[DP ID][Tipo][Tamanho][Valor]` |
+| **Payload** | N bytes | Contém um ou mais DPs (Datapoints) estruturados | `[DP ID][Tipo][Tamanho][Valor]` |
 | **Checksum** | 1 byte | Soma de verificação de todos os bytes (exceto header) `mod 256` | `0x7E` |
 
 ---
@@ -65,17 +65,17 @@ Cada mensagem trocada pela UART obedece à seguinte sequência rígida de bytes:
 
 | Hex | Nome do Comando | Direção | Finalidade |
 | :---: | :--- | :---: | :--- |
-| `0x00` | **Heartbeat** | Módulo ➔ MCU | Pulso periódico de verificação de liveness / integridade da conexão. |
-| `0x01` | **Product Information** | Módulo ➔ MCU | Solicita PID do produto, versão de firmware e configurações. |
-| `0x02` | **Working Mode** | Módulo ➔ MCU | Consulta modo de operação da MCU. |
-| `0x03` | **Wi-Fi State** | Módulo ➔ MCU | Notifica a MCU sobre status da rede (conectado, desconectado, modo AP). |
+| `0x00` | **Heartbeat** | Módulo ➔ MCU | Pulso periódico de verificação de integridade da conexão (*liveness*). |
+| `0x01` | **Product Information** | Módulo ➔ MCU | Solicita PID (Product ID - Identificador de Produto), versão de firmware e configurações. |
+| `0x02` | **Working Mode** | Módulo ➔ MCU | Consulta modo de operação da MCU (Unidade Microcontroladora). |
+| `0x03` | **Wi-Fi State** | Módulo ➔ MCU | Notifica a MCU sobre status da rede (conectado, desconectado, modo AP - Access Point). |
 | `0x04` | **Reset Wi-Fi** | MCU ➔ Módulo | Solicita reinicialização do rádio ou entrada em modo de emparelhamento. |
-| `0x06` | **Send / Report DP** | Ambos | Envio de comandos de controle ou relatório síncrono de status. |
+| `0x06` | **Send / Report DP** | Ambos | Envio de comandos de controle ou relatório síncrono de status de DP (Datapoint). |
 | `0x07` | **Report DP Status (Async)**| MCU ➔ Módulo | Envio espontâneo de leituras de sensores e variações de grandezas elétricas. |
 
 ---
 
-## 5. Estrutura dos Datapoints (DPs)
+## 5. Estrutura dos DPs (Datapoints - Pontos de Dados)
 
 O *Payload* das mensagens `0x06` e `0x07` é composto por blocos de Datapoint:
 
@@ -89,14 +89,14 @@ O *Payload* das mensagens `0x06` e `0x07` é composto por blocos de Datapoint:
 | :---: | :--- | :--- | :--- |
 | `0x00` | **Raw** | Array de bytes livres | Pacotes proprietários, curvas de calibração |
 | `0x01` | **Boolean** | 1 byte (`0x00` = Off / `0x01` = On) | Relé ligado/desligado, alarmes |
-| `0x02` | **Value** | Inteiro de 4 bytes sem sinal (Big-Endian) | **Tensão, Corrente, Potência, Energia** |
-| `0x03` | **String** | String ASCII / UTF-8 | Textos descritivos, versões, IDs |
+| `0x02` | **Value** | Inteiro de 4 bytes sem sinal (Big-Endian) | **Tensão RMS, Corrente RMS, Potência Ativa, Energia Acumulada** |
+| `0x03` | **String** | String ASCII (American Standard Code for Information Interchange) | Textos descritivos, versões, IDs |
 | `0x04` | **Enum** | 1 byte numérico (0, 1, 2...) | Modos de operação selecionáveis |
 | `0x05` | **Bitmap** | 1, 2 ou 4 bytes (máscara de bits) | Códigos de erro múltiplos e flags de falha |
 
 > 💡 **Fator de Escala:** Os valores do tipo `Value` (`0x02`) trafegam como inteiros multiplicados por fatores de escala:
 > * Tensão (`127.4 V`) ➔ enviado como `1274` (multiplicador 10) ou `12740` (multiplicador 100).
-> * Corrente (`12.35 A`) ➔ enviado como `12350` (multiplicador 1000 / mA).
+> * Corrente (`12.35 A`) ➔ enviado como `12350` (multiplicador 1000 / mA - miliamperes).
 > * Potência (`1560.2 W`) ➔ enviado como `15602` (multiplicador 10).
 
 ---
@@ -119,7 +119,7 @@ classDiagram
 
 ## 7. Como Acessar e Interceptar os Dados na Prática
 
-### 7.1. Interceptação Passiva com Analisador Lógico / USB-Serial
+### 7.1. Interceptação Passiva com Analisador Lógico / USB-Serial (Universal Serial Bus - UART)
 
 ```mermaid
 flowchart LR
@@ -128,9 +128,9 @@ flowchart LR
     USB --> PC["Software Serial / PulseView / Python"]
 ```
 
-* **Cuidados Elétricos:** Alimentar o medidor com **3.3V externo de bancada** e manter a rede AC 110V/220V **totalmente desconectada**.
+* **Cuidados Elétricos:** Alimentar o medidor com **3.3V DC (Direct Current) externo de bancada** e manter a rede AC (Alternating Current) 110V/220V **totalmente desconectada**.
 * **Parâmetros Seriais:**
-  * Baud Rate: **9600 bps** (ou **115200 bps** em alguns modelos)
+  * Baud Rate: **9600 bps (bits por segundo)** (ou **115200 bps** em alguns modelos)
   * Data bits: **8**
   * Parity: **None**
   * Stop bits: **1** (`8N1`)
@@ -173,14 +173,14 @@ if __name__ == "__main__":
 
 ## 8. Integração em Firmwares Alternativos
 
-### 8.1. OpenBeken (No SoC Beken BK7238 nativo)
+### 8.1. OpenBeken (No SoC - System on Chip Beken BK7238 nativo)
 Configuração no console web:
 ```text
 tuyaMcu_setBaudRate 9600
 tuyaMcu_defWiFiState 4
-tuyaMcu_defIdMapping 1 1    // Mapeia DP 1 para Canal 1 (Tensão)
-tuyaMcu_defIdMapping 2 2    // Mapeia DP 2 para Canal 2 (Corrente)
-tuyaMcu_defIdMapping 3 3    // Mapeia DP 3 para Canal 3 (Potência)
+tuyaMcu_defIdMapping 1 1    // Mapeia DP 1 para Canal 1 (Tensão RMS)
+tuyaMcu_defIdMapping 2 2    // Mapeia DP 2 para Canal 2 (Corrente Canal A)
+tuyaMcu_defIdMapping 3 3    // Mapeia DP 3 para Canal 3 (Potência Canal A)
 ```
 
 ### 8.2. ESPHome (Substituição por ESP32 / ESP8266)

@@ -1,26 +1,26 @@
 # Engenharia Reversa e Documentação Técnica: Medidor de Energia Tuya (PJ-1103C)
 
-Repositório dedicado ao estudo, análise de hardware, engenharia reversa e desvinculação de nuvem (*cloud unbinding*) do medidor de energia bidirecional/duplo canal **Tuya PJ-1103C** (com clamps de corrente A e B).
+Repositório dedicado ao estudo, análise de hardware, engenharia reversa e desvinculação de nuvem (*cloud unbinding*) do medidor de energia bidirecional/duplo canal **Tuya PJ-1103C** (com sensores TC - Transformador de Corrente / Clamps de medição nos canais A e B).
 
 ---
 
-## 📜 Histórico de Concepção e Contribuições das IAs
+## 📜 Histórico de Concepção e Contribuições das IAs (Inteligências Artificiais)
 
-Este documento consolida as análises e discussões técnicas desenvolvidas com auxílio de Inteligência Artificial, organizadas em duas etapas evolutivas:
+Este documento consolida as análises e discussões técnicas desenvolvidas com auxílio de IA (Inteligência Artificial), organizadas em duas etapas evolutivas:
 
 ```mermaid
 timeline
     title Linha do Tempo e Evolução do Projeto
     Fase 1 - ChatGPT (GPT) : Análise Conceitual e Arquitetura Inicial
-                           : Identificação dos Dois Barramentos UART
+                           : Identificação dos Dois Barramentos UART (Universal Asynchronous Receiver/Transmitter)
                            : Conceito de Captura Passiva de Dados
-                           : Mapeamento Conceitual de Datapoints (TuyaMCU)
-                           : Planejamento de Integração com Servidor Próprio / MQTT
-    Fase 2 - Gemini       : Mapeamento Físico de Componentes da PCB
-                           : Identificação da MCU Nation N32G430 (ARM Cortex-M4)
-                           : Identificação do CI de Medição HLW8112
-                           : Identificação do Módulo Wi-Fi/BLE Beken BK7238 (T1-M 101)
-                           : Mapeamento dos Test Points (SWD e UARTs)
+                           : Mapeamento Conceitual de Datapoints DPs (TuyaMCU)
+                           : Planejamento de Integração com Servidor Próprio via MQTT
+    Fase 2 - Gemini       : Mapeamento Físico de Componentes da PCB (Printed Circuit Board)
+                           : Identificação da MCU (Microcontroller Unit) Nation N32G430 (ARM Cortex-M4)
+                           : Identificação do CI (Circuito Integrado) de Medição HLW8112
+                           : Identificação do Módulo Wi-Fi/BLE (Bluetooth Low Energy) Beken BK7238 (T1-M 101)
+                           : Mapeamento dos Test Points SWD (Serial Wire Debug) e UARTs
                            : Definição dos 3 Caminhos de Firmware Alternativo (OpenBeken, ESP32, Bare-Metal)
                            : Análise Crítica de Segurança de Bancada (Fonte Não Isolada)
 ```
@@ -32,22 +32,22 @@ timeline
 > [!CAUTION]
 > **PERIGO EXTREMO: RISCO DE CHOQUE ELÉTRICO FATAL E DESTRUIÇÃO DE EQUIPAMENTOS**
 >
-> 1. **Fonte Não Isolada Galvanicamente:** A fonte interna deste equipamento utiliza topologia chaveada/buck *não isolada* da rede AC. Isso significa que o **GND da placa pode estar diretamente referenciado ao potencial de Fase ou Neutro (110V/220V)**.
-> 2. **JAMAIS conecte** computadores, conversores USB-Serial, gravadores ST-Link/J-Link ou osciloscópios aterrados aos pinos de depuração (UART/SWD) enquanto os bornes `L` e `N` estiverem plugados à tomada AC.
-> 3. **Protocolo de Bancada Obrigatório:** Durante todo o processo de análise, captura serial, teste ou regravação de firmware, a placa deve estar **completamente desconectada da rede AC**, sendo alimentada unicamente por uma **fonte de bancada externa regulada em 3.3V DC**.
+> 1. **Fonte Não Isolada Galvanicamente:** A fonte interna deste equipamento utiliza topologia chaveada/buck *não isolada* da rede AC (Alternating Current - Corrente Alternada). Isso significa que o **GND (Ground - Terra / Referência Elétrica) da placa pode estar diretamente referenciado ao potencial de Fase ou Neutro (110V/220V)**.
+> 2. **JAMAIS conecte** computadores, conversores USB-Serial (Universal Serial Bus - UART), gravadores SWD (Serial Wire Debug - como ST-Link/J-Link) ou osciloscópios aterrados aos pinos de depuração enquanto os bornes `L` e `N` estiverem plugados à tomada AC.
+> 3. **Protocolo de Bancada Obrigatório:** Durante todo o processo de análise, captura serial, teste ou regravação de firmware, a placa deve estar **completamente desconectada da rede AC**, sendo alimentada unicamente por uma **fonte de bancada externa regulada em 3.3V DC (Direct Current - Corrente Contínua)**.
 
 ---
 
 ## 1. Visão Geral do Dispositivo (PJ-1103C)
 
-* **Modelo Comercial:** PJ-1103C (versão para medição com 2 transformadores de corrente / clamps A e B).
-* **Tensão de Operação:** AC 100–240V, 50/60 Hz.
+* **Modelo Comercial:** PJ-1103C (versão para medição com 2 TCs - Transformadores de Corrente / Clamps A e B).
+* **Tensão de Operação:** AC (Alternating Current - Corrente Alternada) 100–240V, 50/60 Hz.
 * **Faixa de Corrente Suportada:** 0.2A a 80A (por canal).
-* **Conectividade:** Wi-Fi 802.11 b/g/n + Bluetooth LE (BLE v5.2).
+* **Conectividade:** Wi-Fi 802.11 b/g/n + BLE (Bluetooth Low Energy - Bluetooth de Baixa Energia v5.2).
 * **Conexões de Borne:**
   * `L` e `N`: Alimentação AC da rede elétrica (Fase e Neutro).
-  * `S1` e `S2` (Canal A): Entrada do transformador de corrente (TC/Clamp 1).
-  * `S1` e `S2` (Canal B): Entrada do transformador de corrente (TC/Clamp 2).
+  * `S1` e `S2` (Canal A): Entrada do TC (Transformador de Corrente / Clamp 1).
+  * `S1` e `S2` (Canal B): Entrada do TC (Transformador de Corrente / Clamp 2).
 
 ---
 
@@ -57,24 +57,24 @@ O equipamento é estruturado em uma arquitetura modular de duplo controlador:
 
 ```mermaid
 flowchart TD
-    subgraph Entrada["Sensores e Rede AC"]
-        AC["Rede Elétrica (L / N)"]
-        ClampA["Clamp A (S1 / S2)"]
-        ClampB["Clamp B (S1 / S2)"]
+    subgraph Entrada["Sensores e Rede AC (Corrente Alternada)"]
+        AC["Rede Elétrica AC (L / N)"]
+        ClampA["TC Clamp A (S1 / S2)"]
+        ClampB["TC Clamp B (S1 / S2)"]
     end
 
     subgraph Medicao["Módulo de Aquisição Analógica"]
-        HLW8112["CI de Medição de Energia\nHLW8112 (SPI / UART)"]
+        HLW8112["CI (Circuito Integrado) de Medição\nHLW8112 (SPI / UART)"]
     end
 
     subgraph Controle["Processamento Principal"]
-        MCU["MCU Principal (ARM Cortex-M4F)\nNation N32G430C8L7"]
+        MCU["MCU (Unidade Microcontroladora ARM Cortex-M4F)\nNation N32G430C8L7"]
         SWD["Test Points SWD (+, D, C, G)"]
-        UART_FCT["UART FCT / Testes de Fábrica"]
+        UART_FCT["UART FCT (Testes Funcionais de Fábrica)"]
     end
 
     subgraph Conectividade["Módulo de Rádio"]
-        T1M["Módulo Vertical T1-M 101\nSoC Beken BK7238 (Wi-Fi + BLE)"]
+        T1M["Módulo Vertical T1-M 101\nSoC (System on Chip) Beken BK7238 (Wi-Fi + BLE)"]
     end
 
     subgraph Destino["Ecossistema de Destino"]
@@ -86,7 +86,7 @@ flowchart TD
     ClampA --> HLW8112
     ClampB --> HLW8112
 
-    HLW8112 <-->|Amostragem SPI/UART| MCU
+    HLW8112 <-->|Amostragem SPI / UART| MCU
     MCU <-->|Pads de Teste| SWD
     MCU <-->|Diagnóstico| UART_FCT
 
@@ -105,43 +105,43 @@ flowchart TD
 
 | Componente | Part Number | Características Técnicas | Função no Sistema |
 | :--- | :--- | :--- | :--- |
-| **Microcontrolador Principal (MCU)** | `Nation N32G430C8L7` | ARM Cortex-M4F 32-bit @ 64 MHz, 64 KB Flash, 16 KB SRAM | Executa a lógica local, controla periféricos, lê o CI de medição e comunica via protocolo TuyaMCU com o rádio. |
-| **CI de Medição de Energia** | `HLW8112` | Front-end de alta precisão A/D para medição de grandezas elétricas | Amostra Tensão RMS, Corrente RMS nos canais A e B, Potência Ativa, Potência Reativa e Fator de Potência. |
+| **MCU (Microcontroller Unit - Unidade Microcontroladora)** | `Nation N32G430C8L7` | ARM Cortex-M4F 32-bit @ 64 MHz, 64 KB Flash, 16 KB SRAM (Static Random Access Memory) | Executa a lógica local, controla periféricos, lê o CI (Circuito Integrado) de medição e comunica via protocolo TuyaMCU com o rádio. |
+| **CI (Circuito Integrado) de Medição de Energia** | `HLW8112` | Front-end de alta precisão A/D (Analógico/Digital) para medição de grandezas elétricas | Amostra Tensão RMS (Root Mean Square - Valor Eficaz), Corrente RMS nos canais A e B, Potência Ativa, Potência Reativa e Fator de Potência. |
 
 ### 3.2. Módulo de Rádio e Conectividade
 
-* **Módulo:** `T1-M 101` (placa vertical soldada em conector SMD).
-* **SoC Integrado:** `Beken BK7238` (Wi-Fi 802.11 b/g/n + BLE 5.2 sob blindagem metálica).
+* **Módulo:** `T1-M 101` (placa vertical soldada em conector SMD - Surface-Mount Device).
+* **SoC (System on Chip - Sistema em Chip) Integrado:** `Beken BK7238` (Wi-Fi 802.11 b/g/n + BLE - Bluetooth Low Energy 5.2 sob blindagem metálica).
 * **Pinagem Serigrafada no Módulo T1-M:**
-  * `3V3`: Alimentação positiva (+3.3V DC).
-  * `GND`: Referência de terra.
-  * `RX1` / `TX1` (ou `XTX1`): Barramento UART primário (comunicação TuyaMCU com a MCU Nation).
+  * `3V3`: Alimentação positiva (+3.3V DC - Direct Current).
+  * `GND` (*Ground*): Referência de terra elétrica.
+  * `RX1` / `TX1` (ou `XTX1`): Barramento UART (Universal Asynchronous Receiver/Transmitter) primário (comunicação TuyaMCU com a MCU Nation).
   * `TX2`: Barramento UART secundário / console de depuração do SoC Beken.
-  * `P24`: GPIO de uso geral / pino de controle de modo de boot.
+  * `P24`: GPIO (General Purpose Input/Output - Entrada/Saída de Uso Geral) / pino de controle de modo de boot.
 
 ### 3.3. Alimentação, Filtragem e Proteção
 
-* **Varistor (MOV):** `JK-ET 7S471K` (470V, 7 mm) para supressão de surtos e transientes de rede.
-* **Indutor de Potência:** Bobina `681` (680 µH) do conversor DC-DC interno.
+* **Varistor MOV (Metal Oxide Varistor - Varistor de Óxido Metálico):** `JK-ET 7S471K` (470V, 7 mm) para supressão de surtos e transientes de rede.
+* **Indutor de Potência:** Bobina `681` (680 µH) do conversor DC-DC (Direct Current to Direct Current) interno.
 * **Capacitor Primário de Alta Tensão:** Eletrolítico 400V 4.7 µF para retificação primária da rede AC.
-* **Capacitores de Filtragem DC:** Dois capacitores eletrolíticos SMD de 10V 220 µF.
+* **Capacitores de Filtragem DC:** Dois capacitores eletrolíticos SMD (Surface-Mount Device) de 10V 220 µF.
 * **Alarme Sonoro:** Buzzer piezoelétrico para alertas sonoros locais de sobrecorrente e emparelhamento.
 
 ---
 
-## 4. Interfaces de Depuração e Programação Expostas na PCB
+## 4. Interfaces de Depuração e Programação Expostas na PCB (Printed Circuit Board)
 
 A placa possui pontos de teste (*test points*) expostos no verso da PCB:
 
-### 4.1. Barramento SWD (Gravação da MCU ARM Cortex-M4)
+### 4.1. Barramento SWD (Serial Wire Debug - Gravação da MCU ARM Cortex-M4)
 Pads identificados no verso da placa:
-* `+` : VCC (3.3V)
+* `+` : VCC (Voltage Common Collector - Tensão Positiva de Alimentação 3.3V)
 * `D` : SWDIO (Serial Wire Data Input/Output)
 * `C` : SWCLK (Serial Wire Clock)
-* `G` : GND
+* `G` : GND (Ground - Terra / Referência Elétrica)
 
 ### 4.2. Barramento UART da Placa Principal
-Pads `TX`, `RX` e `GND` para monitoramento de telemetria ou diagnóstico de fábrica (FCT).
+Pads `TX`, `RX` e `GND` para monitoramento de telemetria ou diagnóstico de fábrica FCT (Functional Circuit Test - Teste Funcional de Circuito).
 
 ---
 
@@ -151,8 +151,8 @@ Pads `TX`, `RX` e `GND` para monitoramento de telemetria ou diagnóstico de fáb
 
 ### 5.1. Abertura e Modelo de Comunicação
 * **Protocolo Aberto e Não Criptografado na UART:** Os dados entre a MCU Nation e o rádio Beken trafegam em **hexadecimal puro**, sem chaves criptográficas na camada serial.
-* **Nível Lógico:** 3.3V TTL/CMOS (comunicação serial assíncrona standard `8N1`, usualmente em 9600 ou 115200 bps).
-* **Atenção com RS-232:** Portas seriais RS-232 clássicas operam com tensões de ±12V e **destroem** os circuitos se conectadas diretamente sem conversor de nível (ex.: MAX3232).
+* **Nível Lógico:** 3.3V TTL (Transistor-Transistor Logic) / CMOS (Complementary Metal-Oxide-Semiconductor), comunicação serial assíncrona standard `8N1` (8 bits de dados, sem paridade, 1 stop bit), usualmente operando em 9600 ou 115200 bps (bits por segundo).
+* **Atenção com RS-232 (Recommended Standard 232):** Portas seriais RS-232 clássicas operam com tensões de ±12V e **destroem** os circuitos microcontrolados se conectadas diretamente sem conversor de nível (ex.: transceptor MAX3232).
 
 ### 5.2. Estrutura Completa de Frames (Pacote de Bytes)
 
@@ -162,14 +162,14 @@ O protocolo TuyaMCU opera por requisição/resposta e envio assíncrono de event
 | :--- | :--- | :--- | :--- |
 | **Header** | 2 bytes | Identificador fixo de sincronismo | `0x55 0xAA` |
 | **Versão** | 1 byte | Versão do protocolo | `0x00` ou `0x03` |
-| **Comando** | 1 byte | Tipo de instrução | `0x06` (Reportar DP) / `0x00` (Heartbeat) |
+| **Comando** | 1 byte | Código de instrução | `0x06` (Reportar DP) / `0x00` (Heartbeat) |
 | **Comprimento** | 2 bytes | Tamanho em bytes do payload subsequente | `0x00 0x05` (5 bytes) |
 | **Payload (DPs)** | Variável | Dados estruturados dos sensores/comandos | `[DP ID][Tipo][Tam][Valor]` |
 | **Checksum** | 1 byte | Soma de verificação de todos os bytes (exceto header) `mod 256` | `0x3F` |
 
-### 5.3. Datapoints (DPs) e Tipos de Dados
+### 5.3. Datapoints DPs (Pontos de Dados) e Tipos de Dados
 
-Cada medição do medidor é identificada por um **DP ID**:
+Cada medição do medidor é identificada por um **DP ID (Datapoint Identifier)**:
 
 ```text
 [DP ID (1 byte)] [Tipo de Dado (1 byte)] [Tamanho do Valor (2 bytes)] [Valor / Payload (N bytes)]
@@ -179,8 +179,8 @@ Cada medição do medidor é identificada por um **DP ID**:
 | :---: | :--- | :--- | :--- |
 | `0x00` | **Raw** | Binário bruto / array | Pacotes de calibração ou curvas brutas |
 | `0x01` | **Boolean** | 1 byte (`0x00` ou `0x01`) | Estado de relé, alarmes binários |
-| `0x02` | **Value** | Inteiro 4 bytes (Big Endian) | **Tensão, Corrente, Potência e Energia** (ex: `1270` = 127.0V) |
-| `0x03` | **String** | Caracteres ASCII | Mensagens de texto, identificadores |
+| `0x02` | **Value** | Inteiro 4 bytes (Big Endian) | **Tensão RMS, Corrente RMS, Potência Ativa e Energia** (ex: `1270` = 127.0V) |
+| `0x03` | **String** | Caracteres ASCII (American Standard Code for Information Interchange) | Mensagens de texto, identificadores |
 | `0x04` | **Enum** | 1 byte indexado | Modos de operação |
 | `0x05` | **Bitmap** | 1, 2 ou 4 bytes | Flags de falha, alarmes de sobretensão/subtensão |
 
@@ -190,8 +190,8 @@ Cada medição do medidor é identificada por um **DP ID**:
 ```text
 tuyaMcu_setBaudRate 9600
 tuyaMcu_defWiFiState 4
-// Mapeamento de DPs para canais internos do OpenBeken:
-tuyaMcu_defIdMapping 1 1   // DP 1 -> Canal 1 (Tensão)
+// Mapeamento de DPs (Datapoints) para canais internos do OpenBeken:
+tuyaMcu_defIdMapping 1 1   // DP 1 -> Canal 1 (Tensão RMS)
 tuyaMcu_defIdMapping 2 2   // DP 2 -> Canal 2 (Corrente A)
 tuyaMcu_defIdMapping 3 3   // DP 3 -> Canal 3 (Potência A)
 ```
@@ -233,17 +233,17 @@ sensor:
 
 ## 6. Estratégia de Engenharia Reversa e Captura de Tráfego
 
-Para decodificar e mapear os Datapoints sem risco de alterar o comportamento do equipamento:
+Para decodificar e mapear os DPs (Datapoints) sem risco de alterar o comportamento do equipamento:
 
 ```mermaid
 flowchart LR
-    MCU["MCU Nation (TX)"] -->|Linha Original| T1M["Módulo Wi-Fi (RX)"]
-    MCU -.->|Tap Passivo (Não Intrusivo)| Logic["Analisador Lógico / USB-Serial (RX)"]
+    MCU["MCU (Unidade Microcontroladora) Nation (TX)"] -->|Linha Original| T1M["Módulo Wi-Fi (RX)"]
+    MCU -.->|Tap Passivo (Não Intrusivo)| Logic["Analisador Lógico / Conversor USB-Serial (RX)"]
     Logic --> PC["Software de Análise (PulseView / Serial Terminal)"]
 ```
 
 ### Roteiro de Testes em Bancada:
-1. **Conexão Passiva:** Ligar apenas o pino **RX** do analisador/conversor USB-Serial ao pino **TX** da MCU (com GND interligado à fonte de 3.3V externa). O pino TX do computador deve permanecer desconectado.
+1. **Conexão Passiva:** Ligar apenas o pino **RX** do analisador/conversor USB-Serial ao pino **TX** da MCU (com GND interligado à fonte de 3.3V DC externa). O pino TX do computador deve permanecer desconectado.
 2. **Identificação de Baud Rate:** Testar taxas usuais (geralmente 9600 ou 115200 bps, 8N1).
 3. **Variação Controlada de Cargas:**
    * Medir em vazio (corrente zero).
@@ -260,37 +260,38 @@ graph TD
     B["Opção B: Transplante de Hardware (ESP32/ESP8266)"]
     C["Opção C: Firmware Bare-Metal na MCU Nation"]
 
-    A -->|Vantagem| Mantem_HW["Sem alteração física; Suporte nativo a TuyaMCU e MQTT"]
-    B -->|Vantagem| Ecossistema_ESP["Uso de ESPHome, Tasmota ou Arduino/ESP-IDF"]
+    A -->|Vantagem| Mantem_HW["Sem alteração física na PCB; Suporte nativo a TuyaMCU e MQTT"]
+    B -->|Vantagem| Ecossistema_ESP["Uso de ESPHome, Tasmota ou Arduino / ESP-IDF"]
     C -->|Vantagem| Controle_Total["Elimina código Tuya original da MCU; Leitura direta do HLW8112"]
 ```
 
-### Opção A: Regravação do SoC Beken BK7238 com OpenBeken *(Sem modificação física)*
-* **Como funciona:** O chip Nation N32G430 permanece com o firmware original de fábrica lendo o HLW8112 e despachando pacotes TuyaMCU via serial.
+### Opção A: Regravação do SoC (System on Chip) Beken BK7238 com OpenBeken *(Sem modificação física)*
+* **Como funciona:** O chip Nation N32G430 permanece com o firmware original de fábrica lendo o CI (Circuito Integrado) HLW8112 e despachando pacotes TuyaMCU via serial.
 * **Procedimento:**
-  1. Conectar um conversor USB-Serial 3.3V aos pads `3V3`, `GND`, `TX1` e `RX1` da placa T1-M.
+  1. Conectar um conversor USB-Serial (nível lógico 3.3V) aos pads `3V3`, `GND`, `TX1` e `RX1` da placa T1-M.
   2. Gravar o firmware de código aberto **OpenBeken** (`OpenBK7231N` / `BK7238`).
-  3. Configurar o driver `TuyaMCU` no OpenBeken para decodificar os DPs e publicar os dados diretamente via **MQTT** ou integrar nativamente ao **Home Assistant**.
+  3. Configurar o driver `TuyaMCU` no OpenBeken para decodificar os DPs (Datapoints) e publicar os dados diretamente via **MQTT (Message Queuing Telemetry Transport)** ou integrar nativamente ao **Home Assistant**.
+  4. *Guia completo disponível em:* [SRC/V0/passo_a_passo_solucao_a.md](file:///e:/IAGenMaster/2026/CMaker/Projetos/09-MedidoEnergiaTuya/SRC/V0/passo_a_passo_solucao_a.md).
 
 ### Opção B: Substituição do Módulo de Rádio por ESP32 / ESP8266
 * **Como funciona:** Substituição física da placa filha vertical.
 * **Procedimento:**
   1. Dessoldar o módulo vertical `T1-M 101`.
   2. Soldar uma placa compacta (ex.: *ESP32-C3 SuperMini* ou *ESP-12F*) ligando apenas `3.3V`, `GND`, `TX` e `RX`.
-  3. Utilizar ESPHome (componente `tuya`) ou firmware Arduino próprio para ler a serial da MCU Nation e transmitir via MQTT/HTTP.
+  3. Utilizar ESPHome (componente `tuya`) ou firmware Arduino/ESP-IDF (Espressif IoT Development Framework) próprio para ler a serial da MCU Nation e transmitir via MQTT/HTTP (Hypertext Transfer Protocol).
 
-### Opção C: Regravação Bare-Metal da MCU Nation N32G430
-* **Como funciona:** Controle total e independente de qualquer código Tuya ou Beken.
+### Opção C: Regravação Bare-Metal da MCU (Microcontroller Unit) Nation N32G430
+* **Como funciona:** Controle total e independente de qualquer código proprietário Tuya ou Beken.
 * **Procedimento:**
-  1. Conectar um gravador **ST-Link v2**, **J-Link** ou **DAPLink** aos pads SWD (`+`, `D`, `C`, `G`) da placa principal.
+  1. Conectar um gravador SWD (Serial Wire Debug) como **ST-Link v2**, **J-Link** ou **DAPLink** aos pads `+`, `D`, `C` e `G` da placa principal.
   2. Apagar a memória flash e gravar um firmware C/C++ próprio compilado com a toolchain `arm-none-eabi-gcc`.
-  3. Implementar diretamente o driver de leitura dos registradores do chip `HLW8112` via interface SPI/UART.
+  3. Implementar diretamente o driver de leitura dos registradores do CI `HLW8112` via interface SPI (Serial Peripheral Interface) ou UART.
 
 ---
 
-## 8. Integração com Servidor Próprio / MQTT
+## 8. Integração com Servidor Próprio / MQTT (Message Queuing Telemetry Transport)
 
-Exemplo de estrutura de tópicos MQTT proposta para o projeto:
+Exemplo de estrutura de tópicos MQTT e payload JSON (JavaScript Object Notation) para o projeto:
 
 ```text
 cmaker/medidores/pj1103c_01/telemetria
@@ -316,9 +317,9 @@ cmaker/medidores/pj1103c_01/telemetria
 
 ## 9. Análise Industrial e Facilidade de Acesso ao Hardware
 
-* **Testes de Fábrica (ICT/FCT):** A presença de pads SWD e UART expostos decorre da necessidade de gravação em lote por matriz de agulhas (*bed-of-nails*) e calibração rápida na linha de montagem industrial.
-* **Otimização de Custo:** Dispositivos de consumo populares evitam resinas epóxi (*potting*) ou raspagem a laser de serigrafias de CIs para manter o custo unitário mínimo.
-* **Modelo de Ameaça:** A segurança em produtos Tuya é focada na proteção da camada de nuvem e comunicações remotas. O acesso físico com ferro de solda e gravadores de bancada não é bloqueado por hardware além do bit padrão de proteção contra leitura (*Readout Protection - RDP*), que pode ser apagado por regravação completa via SWD.
+* **Testes de Fábrica ICT (In-Circuit Test) e FCT (Functional Circuit Test):** A presença de pads SWD e UART expostos decorre da necessidade de gravação em lote por matriz de agulhas (*bed-of-nails*) e calibração rápida na linha de montagem industrial.
+* **Otimização de Custo:** Dispositivos de consumo populares evitam resinas epóxi (*potting*) ou raspagem a laser de serigrafias de CIs (Circuitos Integrados) para manter o custo unitário mínimo.
+* **Modelo de Ameaça:** A segurança em produtos Tuya é focada na proteção da camada de nuvem e comunicações remotas. O acesso físico com ferro de solda e gravadores de bancada não é bloqueado por hardware além do bit padrão de proteção contra leitura RDP (Readout Protection), que pode ser apagado por regravação completa via SWD.
 
 ---
 
