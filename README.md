@@ -145,29 +145,89 @@ Pads `TX`, `RX` e `GND` para monitoramento de telemetria ou diagnóstico de fáb
 
 ---
 
-## 5. Fundamentos da Comunicação Serial (UART e Protocolo Tuya)
+## 5. Fundamentos da Comunicação Serial e Especificação do Protocolo TuyaMCU
 
-*(Conceitos e análises de comunicação — Origem: GPT)*
+*(Conceitos, engenharia reversa e especificação detalhada de frames)*
 
-### 5.1. Níveis Lógicos e Padrões Físicos
-* **UART:** Comunicação serial assíncrona baseada em TX, RX e GND compartilhado (sem clock síncrono dedicado).
-* **Nível Lógico:** 3.3V TTL/CMOS.
-* **Atenção com RS-232:** Portas seriais RS-232 clássicas operam com tensões de ±12V e **destroem** circuitos microcontrolados se conectadas diretamente sem transceptor conversor (ex.: MAX3232).
+### 5.1. Abertura e Modelo de Comunicação
+* **Protocolo Aberto e Não Criptografado na UART:** Os dados entre a MCU Nation e o rádio Beken trafegam em **hexadecimal puro**, sem chaves criptográficas na camada serial.
+* **Nível Lógico:** 3.3V TTL/CMOS (comunicação serial assíncrona standard `8N1`, usualmente em 9600 ou 115200 bps).
+* **Atenção com RS-232:** Portas seriais RS-232 clássicas operam com tensões de ±12V e **destroem** os circuitos se conectadas diretamente sem conversor de nível (ex.: MAX3232).
 
-### 5.2. Protocolo TuyaMCU e Datapoints (DPs)
-A comunicação interna entre a MCU Nation e o SoC Beken utiliza o protocolo **TuyaMCU**, onde cada parâmetro elétrico e de controle é mapeado em um identificador numérico de Datapoint (DP):
+### 5.2. Estrutura Completa de Frames (Pacote de Bytes)
+
+O protocolo TuyaMCU opera por requisição/resposta e envio assíncrono de eventos através de pacotes com a seguinte anatomia:
+
+| Campo | Tamanho | Descrição | Exemplo em Hex |
+| :--- | :--- | :--- | :--- |
+| **Header** | 2 bytes | Identificador fixo de sincronismo | `0x55 0xAA` |
+| **Versão** | 1 byte | Versão do protocolo | `0x00` ou `0x03` |
+| **Comando** | 1 byte | Tipo de instrução | `0x06` (Reportar DP) / `0x00` (Heartbeat) |
+| **Comprimento** | 2 bytes | Tamanho em bytes do payload subsequente | `0x00 0x05` (5 bytes) |
+| **Payload (DPs)** | Variável | Dados estruturados dos sensores/comandos | `[DP ID][Tipo][Tam][Valor]` |
+| **Checksum** | 1 byte | Soma de verificação de todos os bytes (exceto header) `mod 256` | `0x3F` |
+
+### 5.3. Datapoints (DPs) e Tipos de Dados
+
+Cada medição do medidor é identificada por um **DP ID**:
 
 ```text
-[Header 0x55AA] [Versão] [Comando] [Comprimento] [DP ID] [Tipo] [Tamanho] [Valor / Payload] [Checksum]
+[DP ID (1 byte)] [Tipo de Dado (1 byte)] [Tamanho do Valor (2 bytes)] [Valor / Payload (N bytes)]
 ```
 
-Exemplos típicos de mapeamento de Datapoints:
-* `DP XX`: Tensão RMS (V)
-* `DP YY`: Corrente RMS Canal A (A / mA)
-* `DP ZZ`: Corrente RMS Canal B (A / mA)
-* `DP WW`: Potência Ativa (W)
-* `DP KK`: Energia Acumulada (kWh)
-* `DP LL`: Fator de Potência / Alarmes de Sobrecarga
+| Tipo (`Type ID`) | Nome | Formato | Aplicação no Medidor |
+| :---: | :--- | :--- | :--- |
+| `0x00` | **Raw** | Binário bruto / array | Pacotes de calibração ou curvas brutas |
+| `0x01` | **Boolean** | 1 byte (`0x00` ou `0x01`) | Estado de relé, alarmes binários |
+| `0x02` | **Value** | Inteiro 4 bytes (Big Endian) | **Tensão, Corrente, Potência e Energia** (ex: `1270` = 127.0V) |
+| `0x03` | **String** | Caracteres ASCII | Mensagens de texto, identificadores |
+| `0x04` | **Enum** | 1 byte indexado | Modos de operação |
+| `0x05` | **Bitmap** | 1, 2 ou 4 bytes | Flags de falha, alarmes de sobretensão/subtensão |
+
+### 5.4. Exemplos Práticos de Integração
+
+#### Configuração via OpenBeken (Console Web):
+```text
+tuyaMcu_setBaudRate 9600
+tuyaMcu_defWiFiState 4
+// Mapeamento de DPs para canais internos do OpenBeken:
+tuyaMcu_defIdMapping 1 1   // DP 1 -> Canal 1 (Tensão)
+tuyaMcu_defIdMapping 2 2   // DP 2 -> Canal 2 (Corrente A)
+tuyaMcu_defIdMapping 3 3   // DP 3 -> Canal 3 (Potência A)
+```
+
+#### Configuração via ESPHome (Substituindo o módulo por ESP32):
+```yaml
+uart:
+  id: uart_bus
+  tx_pin: GPIO1
+  rx_pin: GPIO3
+  baud_rate: 9600
+
+tuya:
+  uart_id: uart_bus
+
+sensor:
+  - platform: tuya
+    name: "Tensão de Rede"
+    sensor_datapoint: 1
+    unit_of_measurement: "V"
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: tuya
+    name: "Corrente Canal A"
+    sensor_datapoint: 2
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.001
+```
+
+### 5.5. Referências Oficiais da Tuya
+* [Tuya Serial Port Protocol - MCU Low-Power Universal Docking](https://developer.tuya.com/en/docs/iot/tuya-cloud-universal-serial-port-access-protocol)
+* [Tuya MCU Development Overview](https://developer.tuya.com/en/docs/iot/mcu-development-overview)
 
 ---
 
